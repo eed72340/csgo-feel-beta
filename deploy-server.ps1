@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     把编译好的服务端插件复制到 CS2 的 CounterStrikeSharp 插件目录。
 

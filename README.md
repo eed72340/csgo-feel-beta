@@ -34,7 +34,9 @@ CS2 客户端已经删除了 `cl_bob`、`cl_bobamt_lat`、`viewmodel_recoil`、`
 ```
 .
 ├── build.ps1                  一键构建（GUI / 服务端 / 客户端）
-├── deploy-server.ps1          部署服务端插件到 CS2 目录
+├── deploy-server.ps1          构建后直接部署服务端插件
+├── install-server.ps1         一键安装（只使用本地已编译产物，不自动编译）
+├── install-server.bat         双击运行上面的脚本
 ├── client/                    客户端视觉模组源码（C++ / MSVC）
 ├── server/                    服务端插件源码（CounterStrikeSharp / C#）
 ├── gui/                       离线调参器（WPF）
@@ -88,18 +90,44 @@ Windows 下也可以双击 `build.bat`，按菜单选择。
 
 ### 2. 服务端插件
 
+前置：CS2 专用服务器已安装 Metamod:Source 与 CounterStrikeSharp。
+
+**方式 A：一键安装（使用本地已编译产物）**
+
+先构建一次：
+
 ```powershell
 .\build.ps1 -SkipGui
-.\deploy-server.ps1
 ```
 
-`deploy-server.ps1` 会从注册表和 Steam 库目录自动探测 CS2 安装位置，失败时用 `-Cs2Path` 指定：
+然后双击 `install-server.bat`，或在 PowerShell 里执行：
 
 ```powershell
-.\deploy-server.ps1 -Cs2Path "E:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+.\install-server.ps1
+.\install-server.ps1 -Cs2Path "E:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+.\install-server.ps1 -Undeploy
 ```
 
-卸载：`.\deploy-server.ps1 -Undeploy`。
+脚本只使用现成产物（依次查找 `dist\server\CSGOFeel.dll`、`server\bin\Release\net10.0\CSGOFeel.dll`），
+**不会自动编译**；本机找不到 DLL 时直接失败，并提示先运行 `build.ps1`。
+
+**方式 B：手动安装**
+
+1. 构建：`.\build.ps1 -SkipGui`，得到 `dist\server\CSGOFeel.dll`；
+2. 在 CS2 服务器上创建目录：
+   `<CS2 根目录>\game\csgo\addons\counterstrikesharp\plugins\CSGOFeel\`
+3. 把 `CSGOFeel.dll` 复制进去；
+4. 重启服务器，或在服务器控制台执行 `css_plugins load CSGOFeel`
+   （已加载过时用 `css_plugins reload CSGOFeel`）；
+5. 验证：控制台 `css_csgo` 有输出，玩家聊天框 `!csgo` 有回显。
+
+`deploy-server.ps1`（构建后直接部署）与上面的一键安装等价，仍然可用：
+
+```powershell
+.\deploy-server.ps1
+.\deploy-server.ps1 -Cs2Path "E:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+.\deploy-server.ps1 -Undeploy
+```
 
 部署后重启服务器。玩家配置保存在 `plugins\CSGOFeel\players.json`，按 SteamID 索引；
 进服、出生时会自动下发一次。
