@@ -43,7 +43,6 @@ CS2 客户端已经删除了 `cl_bob`、`cl_bobamt_lat`、`viewmodel_recoil`、`
 ├── server/                    服务端插件源码（CounterStrikeSharp / C#）
 ├── gui/                       离线调参器（WPF）
 ├── tools/                     静态分析脚本、注入加载器、状态探针
-├── docs/                      补充文档
 ├── LICENSE                    MIT
 └── NOTICE.md                  第三方组件与来源说明
 ```
