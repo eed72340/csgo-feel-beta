@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     一键构建 csgo-feel 全部产物：
       1. GUI   -> dist\CSGORestore.exe        (self-contained 单文件)

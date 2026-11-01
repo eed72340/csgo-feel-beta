@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     客户端插件注入脚本（仅用于 -insecure / 离线自建测试）。
 

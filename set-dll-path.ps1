@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     记录 CSGOFeel.dll 的位置，install-server.ps1 会直接使用它，不用每次指定。
 

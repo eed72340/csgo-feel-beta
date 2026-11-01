@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     编译客户端 DLL（MSVC /MT x64）。
     用法：

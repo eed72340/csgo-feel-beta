@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     进程出现后尝试加载一次（仅用于 -insecure / 离线自建环境）。
     在线模式下 CS2 会标记为受保护进程，加载会失败——本项目不做任何绕过，

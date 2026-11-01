@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
     诊断：读取服务端插件与客户端 DLL 之间的共享内存 Local\csgo_feel_v2。
 
