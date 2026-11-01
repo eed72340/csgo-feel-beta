@@ -37,6 +37,8 @@ CS2 客户端已经删除了 `cl_bob`、`cl_bobamt_lat`、`viewmodel_recoil`、`
 ├── deploy-server.ps1          构建后直接部署服务端插件
 ├── install-server.ps1         一键安装（只使用本地已编译产物，不自动编译）
 ├── install-server.bat         双击运行上面的脚本
+├── set-dll-path.ps1           记录 CSGOFeel.dll 的位置（写进 dll-path.txt）
+├── set-dll-path.bat           双击运行上面的脚本
 ├── client/                    客户端视觉模组源码（C++ / MSVC）
 ├── server/                    服务端插件源码（CounterStrikeSharp / C#）
 ├── gui/                       离线调参器（WPF）
@@ -109,7 +111,12 @@ Windows 下也可以双击 `build.bat`，按菜单选择。
 ```
 
 脚本只使用现成产物（依次查找 `dist\server\CSGOFeel.dll`、`server\bin\Release\net10.0\CSGOFeel.dll`），
-**不会自动编译**；本机找不到 DLL 时直接失败，并提示先运行 `build.ps1`。
+**不会自动编译**，也不做全盘搜索；本机找不到 DLL 时直接失败并提示指定路径。
+
+如果 DLL 不在构建目录里（例如别人编译好发给你的），先双击 `set-dll-path.bat`，
+把 `CSGOFeel.dll` 拖进窗口回车记下位置，之后直接双击 `install-server.bat` 即可；
+路径保存在同目录的 `dll-path.txt`，失效时会自动回退并提示重设。也可以用
+`.\install-server.ps1 -Dll "D:\下载\CSGOFeel.dll"` 临时指定一次。
 
 **方式 B：手动安装**
 

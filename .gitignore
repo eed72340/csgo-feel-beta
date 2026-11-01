@@ -18,6 +18,9 @@ client/host/*.obj
 *.zip
 *.log
 
+# 本机记录的用户 DLL 路径
+dll-path.txt
+
 # 编辑器与系统
 .vs/
 *.user

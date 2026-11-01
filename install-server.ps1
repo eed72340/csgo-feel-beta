@@ -3,17 +3,20 @@
     一键安装服务端插件：只使用本地已经编译好的产物，不自动编译。
 
     运行前提：
-      - 已经构建过，存在以下任一文件：
-          dist\server\CSGOFeel.dll
-          server\bin\Release\net10.0\CSGOFeel.dll
+      - 本机存在已编译好的 CSGOFeel.dll，来源按以下顺序确定：
+          1) -Dll 参数显式指定
+          2) set-dll-path.ps1 保存的路径（dll-path.txt）
+          3) 包内产物 dist\server\CSGOFeel.dll 或 server\bin\Release\net10.0\CSGOFeel.dll
       - 本机安装了 CS2 专用服务器 + Metamod:Source + CounterStrikeSharp
 
     用法：
+      .\set-dll-path.ps1                      # 先指定一次 DLL 路径，之后双击 install-server.bat 即可
       .\install-server.ps1
       .\install-server.ps1 -Cs2Path "D:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+      .\install-server.ps1 -Dll "D:\下载\CSGOFeel.dll"
       .\install-server.ps1 -Undeploy
 
-    本机没有编译产物时，脚本会直接失败并提示先运行 build.ps1，不会尝试现场编译。
+    本脚本只复制现成产物，不会现场编译，也不做全盘搜索。
 #>
 param(
     [string]$Cs2Path = "",
@@ -23,11 +26,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+$configFile = Join-Path $root "dll-path.txt"
 
 function Fail($message) {
     Write-Host ""
     Write-Host "[失败] $message" -ForegroundColor Red
     exit 1
+}
+
+# 显式参数优先，其次是 set-dll-path.ps1 保存的路径，最后才用包内构建产物。
+if (-not $Dll -and (Test-Path -LiteralPath $configFile)) {
+    $saved = (Get-Content -LiteralPath $configFile -Raw -ErrorAction SilentlyContinue)
+    if ($saved) {
+        $saved = $saved.Trim().Trim('"')
+        if (Test-Path -LiteralPath $saved) {
+            $Dll = $saved
+            Write-Host "使用已保存的 DLL 路径（dll-path.txt）" -ForegroundColor DarkGray
+        } else {
+            Write-Host "已保存的路径已失效：$saved" -ForegroundColor Yellow
+            Write-Host "请重新运行 .\set-dll-path.ps1 设置，本次改用包内产物。" -ForegroundColor Yellow
+        }
+    }
 }
 
 if (-not $Dll) {
@@ -39,8 +58,8 @@ if (-not $Dll) {
     $Dll = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
 
-if (-not $Dll -or -not (Test-Path $Dll)) {
-    Fail "本机没有找到已编译的 CSGOFeel.dll。请先运行 .\build.ps1 -SkipGui 完成编译，再执行本脚本。"
+if (-not $Dll -or -not (Test-Path -LiteralPath $Dll)) {
+    Fail "找不到 CSGOFeel.dll。请先运行 .\set-dll-path.ps1 指定 DLL 路径，或运行 .\build.ps1 -SkipGui 编译。"
 }
 
 $deploy = Join-Path $root "deploy-server.ps1"
