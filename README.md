@@ -131,13 +131,6 @@ D:\code\csgo-feel-releases\
 - `build.ps1` 每次会清掉交付目录里的 `csgo-feel-injector.*` 与根目录遗留 exe，保证「交付目录只有 DLL」；
 - 服务端 DLL 覆盖后 CounterStrikeSharp 会**热重载**，客户端 DLL 必须重启游戏重新注入。
 
-### 自动构建（GitHub Actions）
-
-`.github/workflows/build.yml` 在 `windows-latest` 上复刻同一条命令（`build.ps1 -OutDir .\dist -Test`）：
-推送到 `main` 或提 PR 时只构建 + 跑全部回归测试，产物作为 workflow artifact 保留 14 天；
-推 `v*` 标签时额外把 `CSGOFeel.dll`、`CSGOFeelClient.dll`、`csgo_feel.ini`、`BUILD.txt` 传到对应发行版。
-本地不需要装任何 GitHub 相关工具，`gh` 由 runner 自带。
-
 ## 注入器：为什么不随包分发
 
 **仓库和发布包里都不会有 `csgo-feel-injector.exe`。** 只提供两样东西：

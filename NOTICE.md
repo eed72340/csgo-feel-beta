@@ -29,9 +29,16 @@ Steam 更新后偏移会失效，需要按 `client\README.md` 的步骤重新计
 
 ## 二进制分发策略
 
-**仓库与发布包中不包含任何预编译的可执行文件**（`.exe` / `.dll` / `.pdb` 全部在 `.gitignore` 里）。
-具体到注入器：`tools\injector\` 只放源码，`build-injector.ps1` 只负责在本地从源码编译，
-产物落在源码树的 `build\injector\`，**不会进入 `D:\code\csgo-feel-releases` 交付目录**。
+**Git 仓库本身不含任何预编译产物**（`.exe` / `.dll` / `.pdb` 全部在 `.gitignore` 里）。
+
+GitHub 发行版的附件里放三样东西：
+
+- `csgo-feel-src-v<版本>.zip`：对应 tag 的纯源码（不含二进制、不含注入器）；
+- `CSGOFeel.dll` / `CSGOFeelClient.dll` + `csgo_feel.ini` + `BUILD.txt`：由**同一份 tag 源码**在本机构建出的双端产物，
+  SHA256 记在 `BUILD.txt` 里，想省掉装 MSVC 的人可以直接用，也可以完全忽略它们自己构建。
+
+**注入器（`csgo-feel-injector.exe`）永远不会出现在仓库或发行版里**：`tools\injector\` 只放源码，
+`build-injector.ps1` 只负责在本地从源码编译，产物落在源码树的 `build\injector\`。
 
 原因：远程线程注入 / 内存加载类可执行文件会触发 GitHub 的自动化恶意软件扫描，
 直接分发容易牵连账号与仓库。源码可读可审计，也不会触发二进制扫描。
