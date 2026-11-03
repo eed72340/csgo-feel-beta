@@ -1,0 +1,56 @@
+csgo-feel 0.2.0  安装说明
+================================================
+
+这个目录就是交付目录：两个 DLL + 配置 + 一键安装脚本。
+构建于 tag v0.2.0（Git 提交 989cb2c），每个文件的 SHA256 见 BUILD.txt。
+
+不需要任何编译工具
+------------------
+安装脚本只用 Windows 自带的 PowerShell 5.1，不编译、不联网、不装运行时。
+Windows 10 / 11 默认就有。
+
+怎么装
+------
+  双击 install.bat
+  —— 或者命令行：
+     powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+
+脚本会：
+  1. 在**本目录**里找双端 DLL（server\CSGOFeel.dll、client\CSGOFeelClient.dll）
+  2. 自动定位 CS2 根目录（Steam 注册表 → libraryfolders.vdf 里每个库）
+  3. 复制到 CS2 里：
+       game\csgo\addons\counterstrikesharp\plugins\CSGOFeel\CSGOFeel.dll
+       csgo-feel\CSGOFeelClient.dll
+       csgo-feel\csgo_feel.ini
+  4. 覆盖前留 .bak_<时间戳> 备份；内容相同的文件直接跳过（可以反复双击）
+  5. 从 Steam 的 loginusers.vdf 读到你的 SteamID，写入用户级环境变量
+     CSGO_FEEL_LOCAL_STEAMID（客户端要靠它才拿得到遥测）
+
+常用参数
+--------
+  -DryRun                 只看会做什么，不写任何文件
+  -Cs2Path "D:\...\Counter-Strike Global Offensive"   手动指定 CS2 根目录
+  -LocalSteamId 7656119xxxxxxxxxx                     手动指定本机 SteamID
+  -SkipServer / -SkipClient                           只装一边
+
+  例：powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -DryRun
+
+装完还要做两件事
+----------------
+  1. Steam → CS2 → 属性 → 启动选项加 -insecure（仅用于自建离线服务器）
+  2. 客户端 DLL 需要注入才会生效。注入器不随包分发（仓库只给源码 tools\injector
+     与编译脚本 build-injector.ps1），自己编一个后：
+       csgo-feel-injector.exe cs2 CSGOFeelClient.dll
+
+文件说明
+--------
+  server\CSGOFeel.dll        服务端插件（CounterStrikeSharp）
+  client\CSGOFeelClient.dll  客户端视觉模组（用注入器加载）
+  client\csgo_feel.ini       客户端配置，必须和 DLL 同目录
+  BUILD.txt                  构建时间 / Git 提交 / SHA256
+  install.ps1 / install.bat  一键安装
+
+源码：仓库 https://github.com/eed72340/csgo-feel-beta（Release 页也有 Source code 包）。
+想自己构建：解压源码后 powershell -ExecutionPolicy Bypass -File .\build.ps1 -Test。
+
+限制：仅限离线 / 本机自建服务器研究，不含任何反作弊绕过。

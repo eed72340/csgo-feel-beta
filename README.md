@@ -107,13 +107,15 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -Test      # 编完顺带�
 powershell -ExecutionPolicy Bypass -File .\build.ps1 -OutDir "D:\somewhere\else"   # 换输出目录
 ```
 
-产物（只有 DLL、配置和清单，**没有任何 exe**）：
+产物（只有 DLL、配置、安装脚本和清单，**没有任何 exe**）：
 
 ```
 D:\code\csgo-feel-releases\
 ├─ server\CSGOFeel.dll            服务端插件（CounterStrikeSharp）
 ├─ client\CSGOFeelClient.dll      客户端视觉模组（注入 cs2.exe）
 ├─ client\csgo_feel.ini           客户端配置
+├─ install.ps1 / install.bat      一键安装（目标机不需要任何编译工具）
+├─ INSTALL.txt                    给最终用户的说明
 └─ BUILD.txt                      构建时间 / Git 提交 / SHA256 清单
 ```
 
@@ -177,6 +179,44 @@ dotnet build .\tools\injector\injector.csproj -c Release
 
 > 注入器只做 `OpenProcess` + `VirtualAllocEx` + `WriteProcessMemory` + `CreateRemoteThread(LoadLibraryW)`，
 > 不改磁盘上的游戏文件、不碰反作弊、不联网。代码就在 `tools/injector/Program.cs`，几屏能读完。
+
+## 一键安装（目标机器不需要任何编译工具）
+
+发行包解开就是交付目录本身 —— 两个 DLL、配置、说明和两个安装脚本，**没有源码**。
+想自己构建的走上面的 `build.ps1`；只想装上用的直接双击 `install.bat`。
+
+```
+csgo-feel-0.2.0\
+├─ server\CSGOFeel.dll
+├─ client\CSGOFeelClient.dll
+├─ client\csgo_feel.ini
+├─ BUILD.txt
+├─ INSTALL.txt
+├─ install.ps1
+└─ install.bat
+```
+
+`install.ps1` 只用 Windows 自带的 PowerShell 5.1（Win10/11 都有）：不编译、不联网、不装运行时，
+所以目标机器上没有 Visual Studio / .NET SDK 也能跑。
+
+- **找产物**：只看脚本所在目录（`server\CSGOFeel.dll`、`client\CSGOFeelClient.dll`），
+  找不到才看上一级；不会扫全盘，也不会去别处抓一个来路不明的 DLL
+- **找 CS2**：`-Cs2Path` → Steam 注册表 `SteamPath` / `InstallPath` → `libraryfolders.vdf` 里每个库，
+  逐个校验 `game\bin\win64\cs2.exe` 是否存在
+- **装什么**：服务端 → `game\csgo\addons\counterstrikesharp\plugins\CSGOFeel\`；
+  客户端 → `csgo-feel\`；`players.json` 若已存在则把 `Lat/Vert/Qieqiang` 对齐到 0.33 / 0.14 / on
+- **幂等**：内容相同直接跳过，不同才覆盖并留 `.bak_<时间戳>`，可以反复双击
+- **SteamID**：读 Steam 的 `loginusers.vdf`（`MostRecent`，没有就退到 `AutoLogin`），
+  写成用户级 `CSGO_FEEL_LOCAL_STEAMID`；读不到会提示用 `-LocalSteamId` 补，否则客户端没有遥测不会晃
+- **降级**：机器上没有 CounterStrikeSharp 目录时只装客户端，不中断
+
+```powershell
+.\install.bat                                                   # 双击即可
+.\install.ps1 -DryRun                                           # 只打印，不写盘
+.\install.ps1 -Cs2Path "E:\SteamLibrary\steamapps\common\Counter-Strike Global Offensive"
+.\install.ps1 -LocalSteamId 7656119xxxxxxxxxx
+.\install.ps1 -SkipServer                                        # 只装客户端
+```
 
 ## 部署到 CS2 根目录
 

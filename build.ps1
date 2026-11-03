@@ -143,7 +143,14 @@ if ($WithInjector) {
     if ($LASTEXITCODE -ne 0) { throw "注入器编译失败 (exit $LASTEXITCODE)" }
 }
 
-# ---------------------------------------------------------------- 6. 测试
+# ---------------------------------------------------------------- 6. 一键安装脚本
+Step "同步一键安装脚本（目标机器无需任何编译工具）"
+Copy-Item (Join-Path $root "install.ps1") $out -Force
+Copy-Item (Join-Path $root "install.bat") $out -Force
+Copy-Item (Join-Path $root "INSTALL.txt") $out -Force
+Ok "install.ps1 + install.bat + INSTALL.txt（双击 install.bat 就能装进 CS2）"
+
+# ---------------------------------------------------------------- 7. 测试
 if ($Test) {
     Step "回归测试（C++ 纯逻辑 + 服务端离线冒烟）"
     & powershell -ExecutionPolicy Bypass -File (Join-Path $root "tests\run.ps1")
@@ -154,8 +161,13 @@ if ($Test) {
 
 # ---------------------------------------------------------------- 汇总 + 清单
 Step "完成，双端 DLL 如下"
-$built = Get-ChildItem $out -Recurse -Filter *.dll -File |
-    Where-Object { $_.FullName -notmatch '\\tools\\' }
+$built = @(Get-ChildItem $out -Recurse -Filter *.dll -File |
+    Where-Object { $_.FullName -notmatch '\\tools\\' })
+# 安装脚本与说明也进清单：用户拿到目录后可以先核对脚本有没有被改过
+foreach ($script in @("install.ps1", "install.bat", "INSTALL.txt")) {
+    $p = Join-Path $out $script
+    if (Test-Path -LiteralPath $p) { $built += Get-Item -LiteralPath $p }
+}
 
 $built | Select-Object @{n = '文件'; e = { $_.FullName.Replace($out + '\', '') } },
                         @{n = '大小(KB)'; e = { [math]::Round($_.Length / 1KB, 1) } },
