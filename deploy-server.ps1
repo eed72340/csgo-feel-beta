@@ -17,7 +17,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-if (-not $Dll) { $Dll = Join-Path $root "dist\server\CSGOFeel.dll" }
+$releaseRoot = 'D:\code\csgo-feel-releases'
+if (-not $Dll) { $Dll = Join-Path $releaseRoot "server\CSGOFeel.dll" }
 
 function Find-Cs2Path {
     # 1) 注册表里的 Steam 安装目录

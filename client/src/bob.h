@@ -2,17 +2,16 @@
 
 namespace feel
 {
-// 与 GUI 模拟器完全一致的 CS:GO 晃动 / 枪口上扬模型。
-// 第二阶段找到 viewmodel 更新函数的挂钩点后，直接调用 BobUpdate，
-// 把 lat/vert/lower/shift/vmPitch/punch 应用到相机与视图模型即可。
+// Source-style approximation, not a recovered CS:GO viewmodel solver.
+// Driven by measured velocity; engine draw/recoil animations remain native.
 
 struct BobSettings
 {
     float bob = 1.0f;          // cl_bob
     float newBob = 0.0f;       // cl_usenewbob
     float lowerAmt = 21.0f;    // cl_bob_lower_amt
-    float amtLat = 0.4f;       // cl_bobamt_lat
-    float amtVert = 0.25f;     // cl_bobamt_vert
+    float amtLat = 0.33f;      // local legacy csgo/cfg/default.cfg
+    float amtVert = 0.14f;
     float bobCycle = 0.98f;    // cl_bobcycle
     float shiftLeft = 1.5f;    // cl_viewmodel_shift_left_amt
     float shiftRight = 0.75f;  // cl_viewmodel_shift_right_amt

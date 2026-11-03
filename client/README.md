@@ -1,6 +1,7 @@
 # 客户端插件 · CSGOFeelClient
 
-MSVC（C++20，`/MT` 静态链接）编译的 x64 DLL，由 `csgo-feel-injector.exe` 加载进 `cs2.exe`，
+MSVC（C++20，`/MT` 静态链接）编译的 x64 DLL，由一个**从源码自行编译**的注入器
+（`build-injector.ps1` → `build\injector\csgo-feel-injector.exe`，仓库不分发该 exe）加载进 `cs2.exe`，
 把 **CS:GO 的手臂/枪模晃动（cl_bob）** 在 CS2 里还原出来。
 
 > ⚠️ **仅限 `-insecure` 自建服务器 / 离线环境**。在线模式下游戏进程受完整性保护，
@@ -21,8 +22,13 @@ client.dll!0x8CEB90  ==  GetViewmodelOffsets(pawn, float* offsetXYZ, float* fov)
 
 - `ConVarRef` 对象（`client.dll` 内固定地址）：`0x2536920` = x，`0x2536930` = y，`0x2536940` = z
 - `ConVarRef + 0x08` → `ConVar*`，`ConVar + 0x58` → `float m_fValue`
-- DLL 起一个 ~250Hz 的线程，按 `bob.cpp` 的 CS:GO 公式算出 lat / vert / lower / shift，
-  写进 `viewmodel_offset_x / y`（z 不动，避免穿模）
+- DLL 起一个工作线程，按 `bob.cpp` 的 CS:GO 公式算出 lat / vert / lower / shift，
+  写进 `viewmodel_offset_x`（左右 + 横移）与 `viewmodel_offset_z`（上下 - 下沉）；
+  `y` 是前后轴，**不动**（旧版把它当上下轴是错的）
+- 同一线程再叠加两层动画：**切枪下沉回弹**（本地窗口消息触发，服务端事件做回执 / 兜底）与**枪口上扬**
+  （跟随服务端下发的引擎真实后坐角 `AimPunchServices.PredictableBaseAngle`，
+  按 `viewmodel_recoil_scale` 缩放；读不到时退回开火计数 + `recoil_kick` 近似）
+- 速度来自服务端遥测（真实 `AbsVelocity`），不再按 WASD 猜
 - 这三个地址写死会随 Steam 更新失效，`cvar.cpp` 会按注册函数的代码特征重新扫描（见下）
 
 ### 已确认的事实（2026-10-31，client.dll 39,224,472 字节）
@@ -51,9 +57,9 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1 -Tag bob1
 powershell -ExecutionPolicy Bypass -File .\watch.ps1 -Tag bob1
 
 # 4) 主菜单被注入后，进图测试：
-#    F9 = 让枪模上下扫 3 秒（验证写入通道）
-#    F8 = 关闭 / 恢复 bob 与切枪动画
+#    F8 = 关闭 / 恢复本地视觉（不动服务端偏好）
 #    滚轮 / 侧键 / 1~5 / Q = 切枪时枪模先下沉再回弹（切枪动画）
+#    开火 = 枪模上扬后回正（需要服务端插件在线）
 ```
 
 日志：`build\csgo_feel_client_<pid>.log`（带 pid，避免多开时抢句柄；`_SH_DENYNO` 共享，注入中也能读）。
@@ -62,51 +68,66 @@ powershell -ExecutionPolicy Bypass -File .\watch.ps1 -Tag bob1
 
 ```ini
 enabled=1        # 注入即生效
-bob=1
-new_bob=0
-lower=21         # cl_bob_lower_amt
-lat=0.4          # cl_bobamt_lat
-vert=0.25        # cl_bobamt_vert
-cycle=0.98       # cl_bobcycle
-shift_left=1.5   # cl_viewmodel_shift_left_amt
-shift_right=0.75
-xscale=0.020     # bob 设计像素 -> viewmodel_offset 单位（觉得太猛就调小）
-yscale=0.020
-run_speed=250
-walk_speed=130
-crouch_speed=85
-qieqiang=1          # 1 开启切枪动画，0 关闭
-qieqiang_amount=0.55  # 下沉幅度（viewmodel_offset 单位）
-qieqiang_time=0.35    # 回弹时长（秒）
-wheel=1          # 1 滚轮 / 侧键也播切枪动画；0 只认 1~5 与 Q
-server_sync=1    # 1 服务端在线时开关与幅度听服务端的；0 完全按本文件
-diagnostics=0    # 1 = 注入时跑内存诊断（排查 ConVar RVA 失效用）；平时关着，否则注入会卡几秒
-toggle_key=119   # F8
+bob=1            # 手臂晃动（幅度来自服务端 PlayerPrefs，不在 ini 里）
+xscale=0.020     # bob 的横向换算（觉得太猛就调小）
+yscale=0.020     # bob 的纵向换算（历史名字，作用在 Z 轴）
+diagnostics=0    # 1 = 注入时跑内存诊断（排查 ConVar RVA 失效用）；平时关着
+
+qieqiang=1            # 1 开启切枪动画；0 是本地否决，服务端也开不起来
+qieqiang_amount=0.55  # 下沉深度（曲线最低点就是它，首尾都回到原位）
+qieqiang_time=0.35    # 从按下到归位的总时长（秒）
+input_trigger=1       # 1 = 窗口消息当主触发，按下即播；0 = 只等服务端事件（会晚 40~80ms）
+
+recoil=1        # 枪口上扬（跟随引擎真实后坐角后回正）
+recoil_punch_gain=0.35  # 真实后坐角换算增益；方向反了就取反
+recoil_kick=0.30  # 只在拿不到真实后坐角时使用的每发下沉量
 ```
 
-### 切枪动画怎么触发
+### 切枪动画怎么触发（同步的关键）
 
-`GetAsyncKeyState` 读不到滚轮（滚轮没有按下/抬起状态），侧键同理。所以按键轮询被换掉了，现在是两条链路去处重：
+`GetAsyncKeyState` 读不到滚轮（滚轮没有按下/抬起状态），侧键同理。所以按键轮询被换掉了，
+改成子类化游戏窗口的 `GWLP_WNDPROC`，拦 `WM_MOUSEWHEEL` / `WM_XBUTTONDOWN` / `WM_KEYDOWN`。
 
-| 链路 | 位置 | 覆盖 |
+触发顺序是**本地优先**，不是「两源去重」：
+
+| 链路 | 位置 | 角色 |
 | --- | --- | --- |
-| 窗口消息 | `input_hook.cpp`：子类化游戏窗口的 `GWLP_WNDPROC`，拦 `WM_MOUSEWHEEL` / `WM_XBUTTONDOWN` / `WM_KEYDOWN` | 滚轮、侧键、1~5、Q |
-| 服务端事件 | `state.cpp`：轮询共享内存里的 `switchSeq` | 任何方式的换枪：拾取、空枪自动切 |
+| 窗口消息 | `input_hook.cpp` | **主触发**：按 3 那一帧就播 |
+| 服务端 `switchSeq` | `telemetry.h`（服务端 `EventItemEquip` 计数） | **回执 + 兜底**：确认这次输入真的换了枪；拾取 / 空枪自动切时补播 |
 
-两个源会在几十毫秒内先后到达，150ms 去重窗口合并成一次动画。服务端报告过一次换枪后，客户端就只认真实换枪事件、不再看按键（避免在聊天框打「2」误播）。窗口过程被游戏重置（换图 / 改分辨率）时，看门狗每 2 秒重新挂一次，日志里会留一行「窗口消息过程被重置，重新接管」。
+为什么必须本地优先：CS2 的起枪动画是客户端预测的，按下即开始；而服务端要等
+usercmd 上行 → `item_equip` 派发 → 下个 tick 发布快照，40~80ms 已经过去了。
+只靠服务端触发，每一次切枪的动画都会晚半拍——这就是「完全不同步」的来源。
+
+配套的三条时序约束：
+
+- **回执被吞**：本地按过后 `kLocalOwnWindow`（300ms）内的服务端事件不再播第二次；
+- **误触撤销**：本地按过后 200ms 仍未收到回执（聊天框打字、按了当前手持的枪位），
+  从当前值平滑淡出——撤销后仍刷新窗口，稍后到达的回执不会再补播一遍；
+- **序号回退只对齐**：插件热重载把 `switchSeq` 归零、DLL 重新注入把本地计数归零，
+  都不会被当成一次换枪。
+
+曲线本身也规定了首尾必须是 0：`t=0` 从原位起步（旧版 `cos(0)=1` 会直接跳到满幅下沉，
+叠加触发延迟后看起来就是「枪模突然掉下去」），`t=duration` 精确回到 0。
+连按切枪时残余值由 `baseline` 接管并按 `exp(-10t)` 淡出，位置连续且不会比配置的深度更深。
 
 没有用 `WH_MOUSE_LL`：低级鼠标钩子会让每帧的鼠标移动都绕到本线程再派发，等于给整个游戏加输入延迟，对打磨手感来说是负收益。
 
+日志里能直接看到时序：`切枪动画 本地→服务端确认 63ms（seq=18）`、
+`切枪动画 撤销一次未确认的输入（服务端 200ms 内没有换枪）`。
+
 ### 与服务端插件的通道
 
-`Local\csgo_feel_v2`，80 字节命名共享内存，字段布局见根 README。要点：
+两条共享内存，都是本机进程间，不依赖 ConVar 与 `ExecuteClientCommand`：
 
-- 服务端写 `enabled` / `qieqiang` / `amount` / `time` / `switchSeq` / 心跳，客户端 200ms 读一次；
-- 客户端每秒写 `clientTick` 与能力位，服务端靠它显示「客户端已注入」；
-- 服务端 15 秒没心跳（插件卸载或换图失败）客户端就退回 ini，不会跟着卡住；
-- ini 里的 `qieqiang=0` 是本地否决，服务端也开不起来；
-- **F8 也会走这条通道**：按下时把「切换总开关」写在 `reqSeq` / `reqCmd` 里，服务端 50ms 内执行并在聊天回显。因为服务端下发的 `bind F8 "say !csgo"` 有被拦掉的可能，这条链路是它的兜底；
-- `server_sync=0` 或没有服务端插件时，行为与以前完全一致。
+| 通道 | 大小 | 方向 | 用途 |
+| --- | --- | --- | --- |
+| `Local\csgo_feel_telemetry_v1` | 128 B | 服务端 → 客户端 | 每 tick 快照：速度、着地、朝向、bob 幅度、切枪参数、开火计数 |
+| `Local\csgo_feel_v2` | 80 B | 双向 | 客户端心跳 / 能力位；F8 请求（`reqSeq` / `reqCmd`），服务端 50ms 轮询并在聊天回显 |
+
+- 遥测用 `sequence` 奇偶 + 250ms 时效 + 有限值校验，任何一项不满足就**不写枪模**并恢复基准；
+- 服务端换图 / 死亡 / 掉线时 `magic` 清零或快照失效，客户端会自动停手，不会冻在最后一帧；
+- 老服务端（version 1）只给 bob，切枪动画那段字段为 0，客户端自动退回「只有 bob」。
 
 排查用 `tools\state-probe.ps1`（加 `-Watch` 持续刷新），能直接看到两侧心跳和 `switchSeq` 变化。
 

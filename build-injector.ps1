@@ -1,14 +1,18 @@
 ﻿#requires -Version 5.1
 <#
-    只构建注入器 csgo-feel-injector.exe。
-    不需要 MSVC，也不需要编译客户端 DLL；适合只想拿注入器的人。
+    从源码构建注入器 csgo-feel-injector.exe。
+
+    **这个可执行文件不随仓库 / 发布包分发。** 仓库只保留源码（tools\injector）
+    和本脚本；谁要用谁自己编。原因见 README「为什么不分发注入器」一节。
+
+    不需要 MSVC，也不需要先编译客户端 DLL；只要 .NET SDK 10。
 
     用法（在仓库根目录执行）：
-      .\build-injector.ps1
-      .\build-injector.ps1 -Output "D:\csgo-feel"
-      .\build-injector.ps1 -SelfContained        # 目标机没装 .NET 10 时用
+        .\build-injector.ps1
+        .\build-injector.ps1 -Output "D:\code\csgo-feel-releases\tools\injector"
+        .\build-injector.ps1 -SelfContained        # 目标机没装 .NET 10 运行时
 
-    默认产物：dist\client\csgo-feel-injector.exe
+    默认产物：build\injector\csgo-feel-injector.exe
 #>
 param(
     [string]$Output = "",
@@ -33,7 +37,7 @@ if (-not $dotnet) { Fail "找不到 dotnet，请先安装 .NET SDK 10：https://
 $version = (& dotnet --version) 2>$null
 Step "dotnet SDK $version"
 
-if (-not $Output) { $Output = Join-Path $root "dist\client" }
+if (-not $Output) { $Output = Join-Path $root "build\injector" }
 New-Item -ItemType Directory -Force $Output | Out-Null
 
 if ($SelfContained) {
@@ -47,7 +51,7 @@ if ($SelfContained) {
     if ($LASTEXITCODE -ne 0) { Fail "发布失败 (exit $LASTEXITCODE)" }
 }
 else {
-    Step "编译注入器（framework-dependent）"
+    Step "编译注入器（framework-dependent，需要 .NET 10 运行时）"
     & dotnet build $project -c $Configuration -v q
     if ($LASTEXITCODE -ne 0) { Fail "编译失败 (exit $LASTEXITCODE)" }
 
@@ -69,6 +73,9 @@ if (-not $SelfContained) {
 }
 
 Write-Host ""
-Write-Host "用法：把 csgo-feel-injector.exe 和 CSGOFeelClient.dll 放在同一目录，" -ForegroundColor Green
-Write-Host "      CS2 启动项加 -insecure，主菜单阶段执行：" -ForegroundColor Green
-Write-Host "      .\csgo-feel-injector.exe cs2 CSGOFeelClient.dll" -ForegroundColor Green
+Write-Host "用法（注入器与客户端 DLL 放在一起）：" -ForegroundColor Green
+Write-Host "  1. CS2 启动项加 -insecure，进到主菜单或地图"
+Write-Host "  2. .\csgo-feel-injector.exe cs2 CSGOFeelClient.dll"
+Write-Host "  3. 看 csgo_feel_client_<pid>.log 确认已接管窗口与共享内存"
+Write-Host ""
+Write-Host "也可以直接用 client\run.ps1，它会自动调用这里的产物。" -ForegroundColor Green

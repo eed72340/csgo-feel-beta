@@ -50,14 +50,14 @@ public sealed class Cvar
         new()
         {
             Name = "cl_bobamt_lat", Label = "左右晃动幅度", Group = "手臂晃动 · cl_bob",
-            Min = 0, Max = 1, Step = 0.01, Default = 0.4, Format = "0.00",
-            Tip = "CS:GO 默认 0.4。横向摆动幅度，0 表示不左右晃。"
+            Min = 0, Max = 1, Step = 0.01, Default = 0.33, Format = "0.00",
+            Tip = "本地 legacy default.cfg 为 0.33。算法为近似演示。"
         },
         new()
         {
             Name = "cl_bobamt_vert", Label = "上下晃动幅度", Group = "手臂晃动 · cl_bob",
-            Min = 0, Max = 1, Step = 0.01, Default = 0.25, Format = "0.00",
-            Tip = "CS:GO 默认 0.25。纵向摆动幅度，双倍频率。"
+            Min = 0, Max = 1, Step = 0.01, Default = 0.14, Format = "0.00",
+            Tip = "本地 legacy default.cfg 为 0.14。算法为近似演示。"
         },
         new()
         {

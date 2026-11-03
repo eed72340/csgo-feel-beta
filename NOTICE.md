@@ -27,6 +27,15 @@ CS:GO 手臂晃动的数值与观感参考了 B 站视频 [BV1zZJZ67ELZ](https:/
 分析脚本在 `tools\an\`。这些是运行时定位用的数值，不包含 Valve 的代码。
 Steam 更新后偏移会失效，需要按 `client\README.md` 的步骤重新计算。
 
+## 二进制分发策略
+
+**仓库与发布包中不包含任何预编译的可执行文件**（`.exe` / `.dll` / `.pdb` 全部在 `.gitignore` 里）。
+具体到注入器：`tools\injector\` 只放源码，`build-injector.ps1` 只负责在本地从源码编译，
+产物落在源码树的 `build\injector\`，**不会进入 `D:\code\csgo-feel-releases` 交付目录**。
+
+原因：远程线程注入 / 内存加载类可执行文件会触发 GitHub 的自动化恶意软件扫描，
+直接分发容易牵连账号与仓库。源码可读可审计，也不会触发二进制扫描。
+
 ## 商标
 
 Counter-Strike 2、CS:GO 及相关名称、标志归 Valve Corporation 所有。

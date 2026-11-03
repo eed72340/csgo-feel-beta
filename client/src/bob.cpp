@@ -35,14 +35,16 @@ float BobDecayPunch(float punch, float punchDecay, float dt)
 void BobUpdate(BobState& state, const BobSettings& s, float dt,
                float speed, float strafe)
 {
-    if (dt <= 0.0f) return;
+    if (!std::isfinite(dt) || !std::isfinite(speed) || !std::isfinite(strafe) || dt <= 0.0f) return;
     dt = std::min(dt, 0.05f);
 
+    speed = std::max(0.0f, speed);
     state.speed = speed;
     float ratio = Clamp(speed / 250.0f, 0.0f, 1.35f);
     float bob = s.bob > 0.5f ? 1.0f : 0.0f;
 
-    float cyclesPerSecond = (0.55f + 1.55f * ratio) / std::max(0.12f, s.bobCycle);
+    // No idle clock: phase advances with travelled distance, not key states.
+    float cyclesPerSecond = ratio / std::max(0.12f, s.bobCycle);
     state.phase += dt * kTau * cyclesPerSecond;
     if (state.phase > kTau * 1000.0f) state.phase -= kTau * 1000.0f;
 

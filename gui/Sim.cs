@@ -6,8 +6,8 @@ public sealed class SimSettings
     public double Bob = 1;          // cl_bob
     public double NewBob = 0;       // cl_usenewbob
     public double LowerAmt = 21;    // cl_bob_lower_amt
-    public double AmtLat = 0.4;     // cl_bobamt_lat
-    public double AmtVert = 0.25;   // cl_bobamt_vert
+    public double AmtLat = 0.33;    // local legacy default.cfg
+    public double AmtVert = 0.14;
     public double BobCycle = 0.98;  // cl_bobcycle
     public double ShiftLeft = 1.5;  // cl_viewmodel_shift_left_amt
     public double ShiftRight = 0.75;
@@ -93,7 +93,7 @@ public sealed class Sim
         WalkBlend = Math.Clamp(Speed / 120.0, 0, 1);
 
         // ---- 晃动相位：速度越快、周期越短 ----
-        double cyclesPerSecond = (0.55 + 1.55 * s) / Math.Max(0.12, S.BobCycle);
+        double cyclesPerSecond = s / Math.Max(0.12, S.BobCycle);
         Phase += dt * Math.Tau * cyclesPerSecond;
         if (Phase > Math.Tau * 1000) Phase -= Math.Tau * 1000;
 

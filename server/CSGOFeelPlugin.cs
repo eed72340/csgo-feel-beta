@@ -18,7 +18,7 @@ public sealed class PlayerPrefs
     public string Preset { get; set; } = "csgo";
     /// <summary>总开关。关闭后所有「CS:GO 手感」项一起停用。</summary>
     public bool Enabled { get; set; } = true;
-    /// <summary>切枪手感：切枪后按 CS:GO 的 deploy 节奏恢复可开火时间。</summary>
+    /// <summary>切枪动画：换枪时枪模先下沉再回弹（客户端执行，这里只开关与幅度）。</summary>
     public bool Qieqiang { get; set; } = true;
     /// <summary>客户端切枪动画的下沉幅度（viewmodel_offset 单位）。</summary>
     public double QieqiangAmount { get; set; } = 0.55;
@@ -27,8 +27,8 @@ public sealed class PlayerPrefs
     public bool Bob { get; set; } = true;
     public bool NewBob { get; set; }
     public double Lower { get; set; } = 21;
-    public double Lat { get; set; } = 0.4;
-    public double Vert { get; set; } = 0.25;
+    public double Lat { get; set; } = 0.33;
+    public double Vert { get; set; } = 0.14;
     public double Cycle { get; set; } = 0.98;
     public double ShiftLeft { get; set; } = 1.5;
     public double ShiftRight { get; set; } = 0.75;
@@ -50,7 +50,8 @@ public sealed class PlayerPrefs
         },
         "off" => new PlayerPrefs
         {
-            Preset = "off", Bob = false, Shangyang = false, ViewmodelRecoil = false
+            Preset = "off", Bob = false, Qieqiang = false,
+            Shangyang = false, ViewmodelRecoil = false
         },
         _ => new PlayerPrefs { Preset = "csgo" }
     };
@@ -71,7 +72,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
     }
 
     public override string ModuleName => "CSGO Feel Restore";
-    public override string ModuleVersion => "1.1.1";
+    public override string ModuleVersion => "2.3.0-preview";
     public override string ModuleAuthor => "csgo-feel";
     public override string ModuleDescription =>
         "保存并下发 CS:GO 的 cl_bob 全指令 / viewmodel_recoil / cs_go_shangyang / 切枪手感（含客户端动画联动）";
@@ -86,6 +87,17 @@ public sealed class CSGOFeelPlugin : BasePlugin
 
     /// <summary>本机上真正坐在键盘前的那名玩家：共享内存只服务一个人。</summary>
     private ulong _linkSteamId;
+
+    /// <summary>本机玩家的真实换枪次数。客户端靠它触发切枪动画（只认真实事件，不猜按键）。</summary>
+    private uint _switchSeq;
+
+    /// <summary>本机玩家的真实开火次数，驱动枪模上扬。</summary>
+    private uint _fireSeq;
+
+    /// <summary>上一 tick 是否读到了引擎真实后坐角，以及它的 pitch（给 !csgo 回显用的）。</summary>
+    private bool _punchOk;
+    private float _punchPitch;
+    private readonly FeelTelemetry _telemetry = new();
 
     private CounterStrikeSharp.API.Modules.Timers.Timer? _linkTimer;
 
@@ -109,7 +121,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         FeelLog.Write($"players.json 已读：{_prefs.Count} 名玩家");
 
         AddCommand("css_csgo", "查看当前 CS:GO 手感配置", OnCsgoCommand);
-        AddCommand("css_preset", "切换预设: !preset csgo|pro|cs2|off", OnPresetCommand);
+        AddCommand("css_preset", "切换预设: css_preset csgo|pro|cs2|off", OnPresetCommand);
         AddCommand("css_shangyang", "枪口上扬开关: !shangyang 0|1", OnShangyangCommand);
         AddCommand("css_bob", "手臂晃动开关: !bob 0|1", OnBobCommand);
         AddCommand("css_csgocfg", "重新把指令下发到你的客户端", OnCfgCommand);
@@ -121,6 +133,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn);
         RegisterEventHandler<EventPlayerConnectFull>(OnPlayerConnectFull);
         RegisterEventHandler<EventItemEquip>(OnItemEquip);
+        RegisterEventHandler<EventWeaponFire>(OnWeaponFire);
         RegisterListener<Listeners.OnTick>(OnGameTick);
 
         Server.PrintToConsole("[CSGOFeel] plugin loaded. type !csgo in chat.");
@@ -148,6 +161,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         FeelLog.Write($"==== 卸载 CSGO Feel v{ModuleVersion}（hotReload={hotReload}）");
         _linkTimer?.Kill();
         _linkTimer = null;
+        _telemetry.Dispose();
         FeelLink.Close();
     }
 
@@ -157,6 +171,15 @@ public sealed class CSGOFeelPlugin : BasePlugin
     /// </summary>
     private void OnGameTick()
     {
+        // Explicit local owner only. A remote/last-connected player is not the local player.
+        var owner = FindLinkPlayer();
+        bool punchOk = false;
+        float punchPitch = 0.0f, punchYaw = 0.0f;
+        if (owner != null) punchOk = AimPunchTap.TryRead(owner, out punchPitch, out punchYaw);
+        _punchOk = punchOk;
+        _punchPitch = punchPitch;
+        if (owner != null) _telemetry.Publish(owner, GetPrefs(owner), _fireSeq, _switchSeq, punchOk, punchPitch, punchYaw);
+        else _telemetry.Invalidate();
         float now = Server.CurrentTime;
         if (now - _lastLinkPoll < 0.05f) return;
         _lastLinkPoll = now;
@@ -201,7 +224,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
     }
 
     /// <summary>
-    /// 同一次按键可能同时经「客户端共享内存请求」和「F8 绑定说 !csgo」两条路到达。
+    /// 同一次按键可能同时经「客户端共享内存请求」和「F8 绑定说 !csgo toggle」两条路到达。
     /// 350ms 内来自不同来源的切换直接丢弃，避免按一下翻两次；同一来源连按仍然照常生效。
     /// </summary>
     private bool TryBeginToggle(string source)
@@ -221,31 +244,56 @@ public sealed class CSGOFeelPlugin : BasePlugin
 
     // ------------------------------------------------------------ 指令
 
+    /// <summary>
+    /// 配置回显。只给「启用状态 + 各项手感」，一眼看完。
+    /// 客户端心跳、后坐角来源、F8 绑定这些排查信息放到 <c>css_csgo diag</c>。
+    /// </summary>
     private void OnCsgoCommand(CCSPlayerController? player, CommandInfo info)
     {
         if (player == null || !player.IsValid) return;
 
         var p = GetPrefs(player);
-        Reply(player, $"csgo手感 {Flag(p.Enabled)} · 预设 {CC.Gold}{PresetName(p.Preset)}");
-        Reply(player, $"切枪手感 {Flag(p.Qieqiang)} (聊天 {CC.Gold}!qieqiang{CC.White} 切换；F8 需要客户端插件)");
-        Reply(player,
-            $"晃动 {Flag(p.Bob)} ({CC.LightPurple}下沉 {p.Lower:0} / lat {p.Lat:0.00} / vert {p.Vert:0.00} / cycle {p.Cycle:0.00}{CC.White})");
-        Reply(player,
-            $"枪口上扬 {Flag(p.Shangyang)} · 枪模上扬 {Flag(p.ViewmodelRecoil)} · 回正 {p.PunchDecay} · 倍率 {p.Scale:0.00}");
+        if (info.ArgCount > 1 && info.GetArg(1).Equals("diag", StringComparison.OrdinalIgnoreCase))
+        {
+            PrintCsgoDiagnostics(player, p);
+            return;
+        }
+
+        PrintCsgoConfig(player, p);
+    }
+
+    /// <summary>四项手感：启用状态 + 晃动 / 切枪 / 上扬。</summary>
+    private void PrintCsgoConfig(CCSPlayerController player, PlayerPrefs p)
+    {
+        Reply(player, $"CSGO 手感 {Flag(p.Enabled)} · 预设 {CC.Gold}{PresetName(p.Preset)}");
+        Reply(player, $"晃动 {Flag(p.Bob)} · 下沉 {p.Lower:0} · 左右 {p.Lat:0.00} · 上下 {p.Vert:0.00} · 周期 {p.Cycle:0.00} · 横移 {p.ShiftLeft:0.00}/{p.ShiftRight:0.00}");
+        Reply(player, $"切枪 {Flag(p.Qieqiang)} · 下沉 {p.QieqiangAmount:0.00} · 回弹 {p.QieqiangTime:0.00}s");
+        Reply(player, $"上扬 {Flag(p.Shangyang)} · 枪模 {Flag(p.ViewmodelRecoil)} · 回正 {p.PunchDecay} · 倍率 {p.Scale:0.00}");
+
+        FeelLog.Write($"csgo 配置回显：{player.PlayerName}");
+    }
+
+    /// <summary>排查用：后坐角来源、客户端心跳、F8 绑定。</summary>
+    private void PrintCsgoDiagnostics(CCSPlayerController player, PlayerPrefs p)
+    {
+        PrintCsgoConfig(player, p);
+
+        Reply(player, _punchOk
+            ? $"后坐角 {CC.Green}真实{CC.White}（AimPunchServices {_punchPitch:+0.00;-0.00;0.00}°）"
+            : $"后坐角 {CC.Grey}不可用{CC.White}（AimPunchServices 未就绪，退回开火计数近似）");
 
         if (FeelLink.TryReadClient(out int ageMs, out uint flags))
         {
             string caps = (flags & FeelLink.FlagWindowHook) != 0 ? "滚轮/侧键已接管" : "仅按键识别";
-            Reply(player, $"切枪动画 下沉 {p.QieqiangAmount:0.00} / 回弹 {p.QieqiangTime:0.00}s · 客户端 {CC.Green}已注入{CC.White}（{ageMs}ms 前心跳 · {caps}）");
+            Reply(player, $"客户端 {CC.Green}已注入{CC.White}（{ageMs}ms 前心跳 · {caps}）");
         }
         else
         {
-            Reply(player, $"切枪动画 下沉 {p.QieqiangAmount:0.00} / 回弹 {p.QieqiangTime:0.00}s · 客户端 {CC.Grey}未注入{CC.White}（按 csgo_feel.ini 执行）");
+            Reply(player, $"客户端 {CC.Grey}未注入{CC.White}（按 csgo_feel.ini 执行）");
         }
 
-        FeelLog.Write($"!csgo 查询：{player.PlayerName}，F8 绑定={(_boundSteamId == player.SteamID ? "已下发" : "未下发")}");
-
-        Reply(player, $"用 {CC.Gold}!preset csgo{CC.White} 一键还原，{CC.Gold}!csgocfg{CC.White} 重新下发。");
+        FeelLog.Write($"css_csgo diag：{player.PlayerName}，F8 绑定={(_boundSteamId == player.SteamID ? "已下发" : "未下发")}");
+        Reply(player, $"F8 绑定 {Flag(_boundSteamId == player.SteamID)} · {CC.Gold}!preset csgo{CC.White} 一键还原 · {CC.Gold}!csgocfg{CC.White} 重新下发");
     }
 
     private void OnPresetCommand(CCSPlayerController? player, CommandInfo info)
@@ -257,11 +305,16 @@ public sealed class CSGOFeelPlugin : BasePlugin
             return;
         }
 
-        string key = info.GetArg(1).ToLowerInvariant();
+        TryApplyPreset(player, info.GetArg(1).ToLowerInvariant());
+    }
+
+    /// <summary>套用预设。控制台 <c>css_preset</c> 与聊天 <c>!preset</c> 共用。</summary>
+    private bool TryApplyPreset(CCSPlayerController player, string key)
+    {
         if (key is not ("csgo" or "pro" or "cs2" or "off"))
         {
             Reply(player, "未知预设，可用: csgo / pro / cs2 / off");
-            return;
+            return false;
         }
 
         var prefs = PlayerPrefs.FromPreset(key);
@@ -271,6 +324,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         PublishLink(player);
 
         Reply(player, $"已切换到 {CC.Gold}{PresetName(key)}{CC.White}，指令已下发。");
+        return true;
     }
 
     private void OnShangyangCommand(CCSPlayerController? player, CommandInfo info)
@@ -341,9 +395,9 @@ public sealed class CSGOFeelPlugin : BasePlugin
             SavePrefs();
             PublishLink(player);
 
-            Reply(player, (isTime
-                ? $"切枪回弹时长 = {CC.Gold}{p.QieqiangTime:0.00}s"
-                : $"切枪下沉幅度 = {CC.Gold}{p.QieqiangAmount:0.00}") + LinkSuffix());
+            Reply(player, isTime
+                ? $"切枪回弹 = {CC.Gold}{p.QieqiangTime:0.00}s{CC.White} · 切枪 {Flag(p.Qieqiang)}"
+                : $"切枪下沉 = {CC.Gold}{p.QieqiangAmount:0.00}{CC.White} · 切枪 {Flag(p.Qieqiang)}");
             return;
         }
 
@@ -359,10 +413,10 @@ public sealed class CSGOFeelPlugin : BasePlugin
         SavePrefs();
         PublishLink(player);
         FeelLog.Write($"切枪手感 -> {value}（来源 {source}，玩家 {player.PlayerName}）");
-        Reply(player, $"切枪手感 {Flag(value)}{LinkSuffix()}");
+        Reply(player, $"切枪 {Flag(value)}");
     }
 
-    /// <summary>总开关：控制台 <c>csgo_feel 0|1|toggle</c>；F8 绑定到聊天的 <c>!csgo</c>。</summary>
+    /// <summary>总开关：控制台 <c>csgo_feel 0|1|toggle</c>；F8 绑定到聊天的 <c>!csgo toggle</c>。</summary>
     private void OnFeelCommand(CCSPlayerController? player, CommandInfo info)
     {
         if (player == null || !player.IsValid) return;
@@ -379,7 +433,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         SavePrefs();
         PublishLink(player);
         FeelLog.Write($"总开关 -> {value}（来源 {source}，玩家 {player.PlayerName}）");
-        Reply(player, $"csgo手感 {(value ? "开" : "关")}{LinkSuffix()}");
+        Reply(player, $"CSGO 手感 {Flag(value)}");
     }
 
     /// <summary>聊天里的 <c>!csgo</c> / <c>!qieqiang</c>。命中后不广播原命令。</summary>
@@ -399,10 +453,29 @@ public sealed class CSGOFeelPlugin : BasePlugin
         {
             case "csgo":
             case "feel":
+                // 不带参数 = 看配置；带参数 = 切换/设置。F8 绑的是 !csgo toggle，所以开关照旧。
+                if (arg.Length == 0)
+                {
+                    PrintCsgoConfig(player, GetPrefs(player));
+                    return HookResult.Handled;
+                }
                 SetFeel(player, ReadChatToggle(arg, GetPrefs(player).Enabled), "chat");
                 return HookResult.Handled;
             case "qieqiang":
+                if (arg.Length == 0)
+                {
+                    Reply(player, $"切枪 {Flag(GetPrefs(player).Qieqiang)}");
+                    return HookResult.Handled;
+                }
                 SetQieqiang(player, ReadChatToggle(arg, GetPrefs(player).Qieqiang), "chat");
+                return HookResult.Handled;
+            case "preset":
+                if (arg.Length == 0)
+                {
+                    Reply(player, $"当前预设 {CC.Gold}{PresetName(GetPrefs(player).Preset)}{CC.White}，可用: csgo / pro / cs2 / off");
+                    return HookResult.Handled;
+                }
+                TryApplyPreset(player, arg.ToLowerInvariant());
                 return HookResult.Handled;
             default:
                 return HookResult.Continue;
@@ -416,7 +489,24 @@ public sealed class CSGOFeelPlugin : BasePlugin
         _ => !current
     };
 
-    /// <summary>切枪后把武器的首个攻击时间对齐到 CS:GO 的 deploy 时长。</summary>
+    /// <summary>
+    /// 枪模上扬的触发源：只统计本机玩家的真实开火。
+    ///
+    /// 服务端拿不到本地子弹的后坐角度（这个 API 版本没有 AimPunchAngle），所以这里只发
+    /// 「开了一枪」这件事，幅度由客户端按 viewmodel_recoil_scale 缩放。不按武器表编角度。
+    /// </summary>
+    private HookResult OnWeaponFire(EventWeaponFire @event, GameEventInfo info)
+    {
+        CCSPlayerController? player = @event.Userid;
+        if (player == null || !player.IsValid || player.IsBot) return HookResult.Continue;
+        if (player.SteamID != _linkSteamId) return HookResult.Continue;
+
+        var p = GetPrefs(player);
+        if (p.Enabled && p.Shangyang && p.ViewmodelRecoil) _fireSeq++;
+        return HookResult.Continue;
+    }
+
+    /// <summary>切枪动画的触发源。只转发本机玩家的真实换枪事件。</summary>
     private HookResult OnItemEquip(EventItemEquip @event, GameEventInfo info)
     {
         CCSPlayerController? player = @event.Userid;
@@ -426,13 +516,14 @@ public sealed class CSGOFeelPlugin : BasePlugin
         if (!p.Enabled || !p.Qieqiang) return HookResult.Continue;
 
         // 只有本机这名玩家的换枪才通知客户端播动画：机器人一场能换几百次枪
-        if (player.SteamID == _linkSteamId) FeelLink.BumpSwitch();
+        if (player.SteamID == _linkSteamId)
+        {
+            FeelLink.BumpSwitch();
+            _switchSeq++;
+        }
 
-        // 下面是服务端的 deploy 时序；schema 偏移没取到时跳过，但客户端动画照常
-        if (!DeployTimingAvailable) return HookResult.Continue;
-
-        int slot = player.Slot;
-        Server.NextFrame(() => ApplyDeployTiming(slot));
+        // Never rewrite attack readiness using the old unverified deploy table.
+        // Native draw/reload/fire timings remain authoritative.
         return HookResult.Continue;
     }
 
@@ -550,8 +641,9 @@ public sealed class CSGOFeelPlugin : BasePlugin
         }
     }
 
-    private static readonly int _nextPrimaryOffset = SchemaOffset("m_flNextPrimaryAttack");
-    private static readonly int _nextSecondaryOffset = SchemaOffset("m_flNextSecondaryAttack");
+    // Retired compatibility code: do not query obsolete float attack-time schema.
+    private static readonly int _nextPrimaryOffset = -1;
+    private static readonly int _nextSecondaryOffset = -1;
     private static readonly bool DeployTimingAvailable = _nextPrimaryOffset > 0;
 
     private static bool WriteFloat(CEntityInstance entity, int offset, float value)
@@ -575,13 +667,17 @@ public sealed class CSGOFeelPlugin : BasePlugin
     private void MarkLinkPlayer(CCSPlayerController player)
     {
         if (player.IsBot) return;
+        // Set CSGO_FEEL_LOCAL_STEAMID before starting a local server.
+        // No implicit ownership based on connection order or a remote server.
+        if (!ulong.TryParse(Environment.GetEnvironmentVariable("CSGO_FEEL_LOCAL_STEAMID"), out var local)
+            || player.SteamID != local) return;
         _linkSteamId = player.SteamID;
         PublishLink(player);
     }
 
     private void PublishLink(CCSPlayerController? player = null)
     {
-        if (player != null && !player.IsBot) _linkSteamId = player.SteamID;
+        if (player != null && player.SteamID != _linkSteamId) return;
         if (_linkSteamId == 0) return;
         if (!_prefs.TryGetValue(_linkSteamId, out var p)) return;
 
@@ -589,19 +685,11 @@ public sealed class CSGOFeelPlugin : BasePlugin
             p.Enabled,
             p.Qieqiang,
             (float)Math.Clamp(p.QieqiangAmount, 0.0, 2.5),
-            (float)Math.Clamp(p.QieqiangTime, 0.10, 2.0));
-    }
-
-    /// <summary>指令回显后缀：客户端 DLL 在不在，玩家一眼能看出来。</summary>
-    private static string LinkSuffix()
-    {
-        if (!FeelLink.TryReadClient(out int ageMs, out _))
-            return $"{CC.Grey}（未检测到客户端 DLL，动画按 ini 走）{CC.White}";
-        return $"{CC.Grey}（客户端已同步，{ageMs}ms 前心跳）{CC.White}";
+            (float)Math.Clamp(p.QieqiangTime, 0.10, 2.0), p.Bob);
     }
 
     /// <summary>
-    /// 尝试把 F8 绑到 <c>say !csgo</c>。
+    /// 尝试把 F8 绑到 <c>say !csgo toggle</c>（带参数才是切换，裸 !csgo 是看配置）。
     ///
     /// 注意：CS2 里这个调用不保证生效——实测服务端下发 <c>bind</c> 后，
     /// 客户端退出时写出的 cs2_user_keys_0_slot0.vcfg 里并没有这条绑定，
@@ -614,7 +702,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
 
         try
         {
-            player.ExecuteClientCommand("bind F8 \"say !csgo\"");
+            player.ExecuteClientCommand("bind F8 \"say !csgo toggle\"");
             _boundSteamId = player.SteamID;
             FeelLog.Write($"已尝试下发 bind F8（{reason}，玩家 {player.PlayerName}）；" +
                           "CS2 不保证生效，F8 真正可用要靠客户端插件");
@@ -700,7 +788,7 @@ public sealed class CSGOFeelPlugin : BasePlugin
         {
             if (!player.IsValid) return;
             BindToggleKey(player, "connectfull+6s");
-            player.PrintToChat($" {CC.White}[{CC.Gold}CSGO{CC.White}] 聊天 {CC.Gold}!csgo{CC.White} 切换手感 / {CC.Gold}!qieqiang{CC.White} 切枪手感，{CC.Gold}!csgo{CC.White} 也能看当前配置；控制台 {CC.Gold}csgo_feel 0|1{CC.White}。装了客户端插件后 F8 也可用。");
+            player.PrintToChat($" {CC.White}[{CC.Gold}CSGO{CC.White}] 聊天 {CC.Gold}!csgo{CC.White} 看当前手感配置，{CC.Gold}!csgo 0|1{CC.White} 开关；控制台 {CC.Gold}csgo_feel 0|1{CC.White}。装了客户端插件后 F8 也能开关。");
         });
         return HookResult.Continue;
     }

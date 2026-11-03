@@ -4,7 +4,7 @@ WPF（.NET 10）单文件桌面工具。左侧调参，右侧实时预览视图�
 
 ## 运行
 
-- 直接用发布产物：`..\dist\CSGORestore.exe`（免安装，self-contained）
+- 直接用发布产物：`D:\code\csgo-feel-releases\gui\CSGORestore.exe`（`build.ps1 -WithGui` 生成，免安装）
 - 或本地调试：`dotnet run --project CSGORestore.csproj`
 
 ## 源码说明

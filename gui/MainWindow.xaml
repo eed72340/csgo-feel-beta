@@ -92,7 +92,7 @@
 
                     <TextBlock Grid.Row="2" Margin="16,10,16,12" TextWrapping="Wrap" FontSize="10.5"
                                Foreground="{StaticResource Muted}" LineHeight="16"
-                               Text="cl_bob 系列是 CS:GO 的客户端指令，CS2 已移除；本工具用同一套算法把它们可视化，导出的 cfg 需配合客户端插件使用。"/>
+                                Text="这是近似可视化，不是原引擎复刻。legacy 本地配置：lat 0.33 / vert 0.14。CS2 不会执行已移除的 cl_bob 指令；客户端需本机服务端遥测。"/>
                 </Grid>
             </Border>
         </Grid>

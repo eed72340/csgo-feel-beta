@@ -27,8 +27,23 @@ if (-not $Dll) {
 }
 if (-not (Test-Path $Dll)) { throw "找不到 DLL：$Dll" }
 
-$injector = Join-Path $root "..\tools\injector\bin\Release\net10.0-windows\csgo-feel-injector.exe"
-if (-not (Test-Path $injector)) { throw "找不到注入器：$injector（先运行 build.ps1）" }
+# 注入器不随包分发：优先用自己编的（build\injector），没有就当场从源码编译。
+function Resolve-Injector {
+    $candidates = @(
+        (Join-Path $root "..\build\injector\csgo-feel-injector.exe"),
+        (Join-Path $root "..\tools\injector\bin\Release\net10.0-windows\csgo-feel-injector.exe")
+    )
+    foreach ($c in $candidates) { if (Test-Path -LiteralPath $c) { return (Resolve-Path -LiteralPath $c).Path } }
+
+    Write-Host "没有找到注入器，先从源码编译……" -ForegroundColor Yellow
+    & powershell -ExecutionPolicy Bypass -File (Join-Path $root "..\build-injector.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "注入器编译失败" }
+
+    foreach ($c in $candidates) { if (Test-Path -LiteralPath $c) { return (Resolve-Path -LiteralPath $c).Path } }
+    throw "编译完成仍找不到注入器。"
+}
+
+$injector = Resolve-Injector
 
 $logDir = Join-Path $root "build"
 Get-ChildItem $logDir -Filter "csgo_feel_client*.log" -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue

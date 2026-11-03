@@ -25,7 +25,7 @@ public partial class MainWindow : Window
         BuildPanel();
         PullSettings();
 
-        AppendLog("CS:GO 手感还原器 v1.0 · cl_bob 全指令 + 枪口上扬还原");
+        AppendLog("CS:GO Feel v2 preview · 近似演示，不代表已完整复刻原引擎");
         AppendLog("拖动右侧滑块，或直接输入指令（例：cl_bobamt_lat 0.2 / cs_go_shangyang 0）。输入 help 查看全部指令。");
 
         Deactivated += (_, _) =>
@@ -128,7 +128,7 @@ public partial class MainWindow : Window
             "csgo" =>
             [
                 ("cl_bob", 1), ("cl_usenewbob", 0), ("cl_bob_lower_amt", 21),
-                ("cl_bobamt_lat", 0.4), ("cl_bobamt_vert", 0.25), ("cl_bobcycle", 0.98),
+                ("cl_bobamt_lat", 0.33), ("cl_bobamt_vert", 0.14), ("cl_bobcycle", 0.98),
                 ("cl_viewmodel_shift_left_amt", 1.5), ("cl_viewmodel_shift_right_amt", 0.75),
                 ("cs_go_shangyang", 1), ("viewmodel_recoil", 1), ("view_punch_decay", 18),
                 ("viewmodel_recoil_scale", 1), ("sim_run_speed", 250), ("sim_autowalk", 1)

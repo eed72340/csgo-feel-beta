@@ -6,7 +6,7 @@
       - 本机存在已编译好的 CSGOFeel.dll，来源按以下顺序确定：
           1) -Dll 参数显式指定
           2) set-dll-path.ps1 保存的路径（dll-path.txt）
-          3) 包内产物 dist\server\CSGOFeel.dll 或 server\bin\Release\net10.0\CSGOFeel.dll
+          3) 发布目录 D:\code\csgo-feel-releases\server\CSGOFeel.dll 或 server\bin\Release\net10.0\CSGOFeel.dll
       - 本机安装了 CS2 专用服务器 + Metamod:Source + CounterStrikeSharp
 
     用法：
@@ -51,7 +51,7 @@ if (-not $Dll -and (Test-Path -LiteralPath $configFile)) {
 
 if (-not $Dll) {
     $candidates = @(
-        (Join-Path $root "dist\server\CSGOFeel.dll"),
+        (Join-Path 'D:\code\csgo-feel-releases' "server\CSGOFeel.dll"),
         (Join-Path $root "server\bin\Release\net10.0\CSGOFeel.dll"),
         (Join-Path $root "server\bin\Release\CSGOFeel.dll")
     )

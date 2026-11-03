@@ -120,6 +120,14 @@ else {
         (Join-Path $sdk.Lib "um\x64")
     ) -join ';'
 
+    # cl.exe 会调同目录的 link.exe，但 link 还要找 mspdbcore.dll / cvtres.exe，
+    # 这些只在工具链目录里。干净环境（比如 CI runner）的 PATH 没有它们，
+    # 必须显式加进去，否则报 “cannot execute link.exe”。
+    $env:PATH = @(
+        (Join-Path $msvc "bin\Hostx64\x64"),
+        $env:PATH
+    ) -join ';'
+
     $cl = Join-Path $msvc "bin\Hostx64\x64\cl.exe"
     & $cl @clArgs
     if ($LASTEXITCODE -ne 0) { throw "编译失败 (exit $LASTEXITCODE)" }
