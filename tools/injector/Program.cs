@@ -46,13 +46,16 @@ internal static class Program
     {
         Console.OutputEncoding = Encoding.UTF8;
 
-        if (args.Length < 2 || args[0] is "-h" or "--help")
+        bool force = args.Any(a => a.Equals("-Force", StringComparison.OrdinalIgnoreCase));
+        string[] positional = args.Where(a => !a.StartsWith("-", StringComparison.Ordinal)).ToArray();
+
+        if (positional.Length < 2 || args.Length == 0)
         {
             PrintUsage();
             return 1;
         }
 
-        string processName = Path.GetFileNameWithoutExtension(args[0]);
+        string processName = Path.GetFileNameWithoutExtension(positional[0]);
         int forcedPid = 0;
 
         int colon = processName.LastIndexOf(':');
@@ -62,7 +65,7 @@ internal static class Program
             processName = processName[..colon];
         }
 
-        string dllPath = Path.GetFullPath(args[1]);
+        string dllPath = Path.GetFullPath(positional[1]);
 
         if (!File.Exists(dllPath))
         {
@@ -86,19 +89,32 @@ internal static class Program
 
         // CS2 会同时存在启动器进程和真正的游戏进程，只有后者加载了 client.dll。
         var target = candidates.FirstOrDefault(c => c.HasClientDll) ?? candidates[0];
+        if (!target.HasClientDll && !force)
+        {
+            // 之前这里只打印一句警告就继续注入，结果 CreateRemoteThread 失败 87，
+            // 用户看到的只有"注入失败"，根本不知道是游戏还没进主菜单。
+            Console.WriteLine();
+            Console.WriteLine("注入已中止：没有任何 cs2 进程加载 client.dll。");
+            Console.WriteLine("这说明游戏还停在启动器 / 加载阶段，此时注入必然失败（CreateRemoteThread 87）。");
+            Console.WriteLine("等真正进到主菜单或地图后再运行本工具；确实要强行尝试，加 -Force。");
+            return 2;
+        }
         if (!target.HasClientDll)
-            Console.WriteLine("警告：没有任何候选进程加载 client.dll，可能还停在启动器阶段。");
+            Console.WriteLine("警告：目标进程没有加载 client.dll（-Force 强制继续）。");
 
         return Inject(target, dllPath);
     }
 
     private static void PrintUsage()
     {
-        Console.WriteLine("用法: csgo-feel-injector.exe <进程名> <DLL 路径>");
+        Console.WriteLine("用法: csgo-feel-injector.exe [-Force] <进程名> <DLL 路径>");
         Console.WriteLine("示例: csgo-feel-injector.exe cs2 client\\build\\CSGOFeelClient.dll");
         Console.WriteLine();
         Console.WriteLine("CS2 同时存在多个 cs2.exe 进程。本工具会优先选择已加载 client.dll 的那个；");
         Console.WriteLine("也可以用 <进程名>:<pid> 精确指定，例如 cs2:16740");
+        Console.WriteLine();
+        Console.WriteLine("默认拒绝注入还没加载 client.dll 的进程（那是启动器壳，注入必然失败）。");
+        Console.WriteLine("-Force 可以跳过这项检查，仅用于排查。");
     }
 
     private sealed class Candidate

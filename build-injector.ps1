@@ -55,9 +55,19 @@ else {
     & dotnet build $project -c $Configuration -v q
     if ($LASTEXITCODE -ne 0) { Fail "编译失败 (exit $LASTEXITCODE)" }
 
-    $built = Join-Path $root "tools\injector\bin\$Configuration\net10.0-windows\csgo-feel-injector.exe"
+    $builtDir = Join-Path $root "tools\injector\bin\$Configuration\net10.0-windows"
+    $built = Join-Path $builtDir "csgo-feel-injector.exe"
     if (-not (Test-Path $built)) { Fail "编译成功但找不到产物：$built" }
-    Copy-Item $built (Join-Path $Output "csgo-feel-injector.exe") -Force
+
+    # apphost 只是壳：真正跑起来还需要同目录的 .dll / .deps.json / .runtimeconfig.json。
+    # 之前只复制了 .exe，产物单独存在时一执行就报
+    #   "The application to execute does not exist: ...csgo-feel-injector.dll"
+    # 而 client\run.ps1 偏偏优先拿 build\injector 里的这个残缺 exe。
+    foreach ($name in @("csgo-feel-injector.exe", "csgo-feel-injector.dll",
+                        "csgo-feel-injector.deps.json", "csgo-feel-injector.runtimeconfig.json")) {
+        $from = Join-Path $builtDir $name
+        if (Test-Path -LiteralPath $from) { Copy-Item $from $Output -Force }
+    }
 }
 
 $exe = Join-Path $Output "csgo-feel-injector.exe"
